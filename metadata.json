@@ -1,0 +1,7 @@
+{
+  "name": "Gestor Ágil",
+  "description": "Um sistema leve e funcional para pequenos empreendedores gerirem vendas, stock, finanças e clientes com foco em agilidade e WhatsApp.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

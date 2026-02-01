@@ -7,13 +7,19 @@ export interface ShopConfig {
   currency: string;
 }
 
+export interface AuthSession {
+  companyName: string;
+  lastLogin: string;
+  token: string;
+}
+
 export interface Product {
   id: string;
   name: string;
   price: number;
   cost: number;
   stock: number;
-  manageStock: boolean; // Novo: Permite produtos sem controle de estoque
+  manageStock: boolean;
   image?: string;
   category: string;
 }
@@ -42,7 +48,9 @@ export interface Sale {
   items: SaleItem[];
   total: number;
   paymentMethod: PaymentMethod;
-  status: 'completed' | 'pending';
+  status: 'completed' | 'pending' | 'refunded';
+  refundedAt?: string;
+  refundReason?: string;
 }
 
 export interface Expense {

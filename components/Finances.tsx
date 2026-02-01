@@ -25,7 +25,9 @@ const Finances: React.FC<FinancesProps> = ({ sales, expenses, setExpenses, shopC
   };
 
   const summary = useMemo(() => {
-    const totalIncome = sales.reduce((acc, s) => acc + s.total, 0);
+    // Only count non-refunded sales for income
+    const activeSales = sales.filter(s => s.status !== 'refunded');
+    const totalIncome = activeSales.reduce((acc, s) => acc + s.total, 0);
     const totalOut = expenses.reduce((acc, e) => acc + e.amount, 0);
     return {
       totalIncome,
@@ -78,7 +80,7 @@ const Finances: React.FC<FinancesProps> = ({ sales, expenses, setExpenses, shopC
             <span className="font-black text-[10px] uppercase tracking-widest">Entradas</span>
           </div>
           <p className="text-2xl font-black text-gray-900 tracking-tighter truncate">{formatCurrency(summary.totalIncome)}</p>
-          <p className="text-xs text-gray-400 mt-2">Vendas Brutas</p>
+          <p className="text-xs text-gray-400 mt-2">Vendas Ativas</p>
         </div>
 
         <div className="bg-white p-8 rounded-[32px] border border-gray-50 shadow-sm">

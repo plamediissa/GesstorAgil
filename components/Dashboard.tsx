@@ -18,7 +18,8 @@ import {
   Users,
   CreditCard,
   Target,
-  Medal
+  Medal,
+  WifiOff
 } from 'lucide-react';
 import { Sale, Expense, Product, Customer, AppView, ShopConfig } from '../types';
 import { GoogleGenAI } from "@google/genai";
@@ -35,6 +36,8 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ sales, expenses, products, customers, setActiveView, shopConfig }) => {
   const [insight, setInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+
+  const isOnline = navigator.onLine;
 
   const formatCurrency = (value: number) => {
     const formatted = new Intl.NumberFormat('pt-AO', {
@@ -106,6 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, expenses, products, custom
   }, [sales]);
 
   const generateAIInsight = async () => {
+    if (!isOnline) return;
     setIsGeneratingInsight(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -198,30 +202,44 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, expenses, products, custom
                 <Sparkles className="text-blue-400 group-hover:animate-pulse" size={20} />
                 <h3 className="font-black text-[10px] uppercase tracking-[0.2em]">Consultoria IA</h3>
               </div>
-              <p className="text-slate-300 text-sm leading-relaxed min-h-[80px]">
-                {insight || "Os seus dados financeiros estão prontos para análise. Clique para uma orientação estratégica."}
-              </p>
-              {!insight && !isGeneratingInsight && (
-                <button 
-                  onClick={generateAIInsight}
-                  className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-blue-500/20"
-                >
-                  Analisar Negócio
-                </button>
-              )}
-              {isGeneratingInsight && (
-                <div className="mt-6 flex items-center justify-center gap-3 text-sm text-slate-400 font-bold italic">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
-                  Processando...
+              
+              {!isOnline ? (
+                <div className="flex flex-col items-center justify-center py-4 text-center space-y-3">
+                  <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-amber-400">
+                    <WifiOff size={24} />
+                  </div>
+                  <p className="text-slate-400 text-xs font-bold leading-relaxed px-4">
+                    A Consultoria IA requer internet para analisar os seus dados. Conecte-se para receber novos insights.
+                  </p>
                 </div>
-              )}
-              {insight && (
-                <button 
-                  onClick={() => setInsight(null)}
-                  className="mt-6 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
-                >
-                  Nova Análise
-                </button>
+              ) : (
+                <>
+                  <p className="text-slate-300 text-sm leading-relaxed min-h-[80px]">
+                    {insight || "Os seus dados financeiros estão prontos para análise. Clique para uma orientação estratégica."}
+                  </p>
+                  {!insight && !isGeneratingInsight && (
+                    <button 
+                      onClick={generateAIInsight}
+                      className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                    >
+                      Analisar Negócio
+                    </button>
+                  )}
+                  {isGeneratingInsight && (
+                    <div className="mt-6 flex items-center justify-center gap-3 text-sm text-slate-400 font-bold italic">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
+                      Processando...
+                    </div>
+                  )}
+                  {insight && (
+                    <button 
+                      onClick={() => setInsight(null)}
+                      className="mt-6 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
+                    >
+                      Nova Análise
+                    </button>
+                  )}
+                </>
               )}
             </div>
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 opacity-5 rounded-full -mr-16 -mt-16 blur-3xl"></div>

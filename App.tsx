@@ -10,19 +10,24 @@ import {
   X, 
   ArrowUpCircle, 
   Settings as SettingsIcon,
-  TrendingUp
+  TrendingUp,
+  LogOut,
+  ChevronRight
 } from 'lucide-react';
-import { AppView, Product, Customer, Sale, Expense, ShopConfig } from './types';
+import { AppView, Product, Customer, Sale, Expense, ShopConfig, AuthSession } from './types';
 import Dashboard from './components/Dashboard';
 import Sales from './components/Sales';
 import Inventory from './components/Inventory';
 import CRM from './components/CRM';
 import Finances from './components/Finances';
 import Settings from './components/Settings';
+import Login from './components/Login';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [session, setSession] = useState<AuthSession | null>(null);
   
   // App State
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,8 +42,21 @@ const App: React.FC = () => {
     currency: 'Kz'
   });
 
-  // Load Initial Data
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const savedSession = localStorage.getItem('ga_session');
+    if (savedSession) setSession(JSON.parse(savedSession));
+
     const savedProducts = localStorage.getItem('ga_products');
     const savedCustomers = localStorage.getItem('ga_customers');
     const savedSales = localStorage.getItem('ga_sales');
@@ -52,30 +70,37 @@ const App: React.FC = () => {
     if (savedConfig) setShopConfig(JSON.parse(savedConfig));
   }, []);
 
-  // Persist State Changes
   useEffect(() => {
     localStorage.setItem('ga_products', JSON.stringify(products));
     localStorage.setItem('ga_customers', JSON.stringify(customers));
     localStorage.setItem('ga_sales', JSON.stringify(sales));
     localStorage.setItem('ga_expenses', JSON.stringify(expenses));
     localStorage.setItem('ga_shop_config', JSON.stringify(shopConfig));
-  }, [products, customers, sales, expenses, shopConfig]);
+    if (session) {
+      localStorage.setItem('ga_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('ga_session');
+    }
+  }, [products, customers, sales, expenses, shopConfig, session]);
 
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const handleLogin = (newSession: AuthSession) => {
+    setSession(newSession);
+    if (!shopConfig.name || shopConfig.name === 'Minha Loja') {
+      setShopConfig(prev => ({ ...prev, name: newSession.companyName }));
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Deseja realmente encerrar a sessão?')) {
+      setSession(null);
+      setIsSidebarOpen(false);
+    }
+  };
 
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return (
-          <Dashboard 
-            sales={sales} 
-            expenses={expenses} 
-            products={products} 
-            customers={customers}
-            setActiveView={setActiveView}
-            shopConfig={shopConfig}
-          />
-        );
+        return <Dashboard sales={sales} expenses={expenses} products={products} customers={customers} setActiveView={setActiveView} shopConfig={shopConfig} />;
       case 'sales':
         return <Sales sales={sales} setSales={setSales} products={products} customers={customers} setProducts={setProducts} setCustomers={setCustomers} shopConfig={shopConfig} />;
       case 'inventory':
@@ -91,81 +116,101 @@ const App: React.FC = () => {
     }
   };
 
-  const NavItem = ({ view, icon: Icon, label }: { view: AppView, icon: any, label: string }) => (
+  if (!session) return <Login onLogin={handleLogin} />;
+
+  const MobileBottomTab = ({ view, icon: Icon, label }: { view: AppView, icon: any, label: string }) => (
     <button
-      onClick={() => { setActiveView(view); setIsSidebarOpen(false); }}
-      className={`flex items-center gap-3 w-full p-4 rounded-xl transition-all ${
-        activeView === view ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-500 hover:bg-gray-100'
+      onClick={() => setActiveView(view)}
+      className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
+        activeView === view ? 'text-blue-600' : 'text-gray-400'
       }`}
     >
-      <Icon size={20} />
-      <span className="font-medium">{label}</span>
+      <div className={`p-1 rounded-lg ${activeView === view ? 'bg-blue-50' : ''}`}>
+        <Icon size={20} strokeWidth={activeView === view ? 2.5 : 2} />
+      </div>
+      <span className="text-[10px] font-black uppercase tracking-tighter">{label}</span>
     </button>
   );
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-gray-50 overflow-hidden">
-      <header className="md:hidden bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-            <TrendingUp size={18} />
-          </div>
-          <span className="font-bold text-lg tracking-tight truncate max-w-[150px]">{shopConfig.name}</span>
-        </div>
-        <button onClick={toggleSidebar} className="p-2 text-gray-600">
-          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </header>
-
-      <aside className={`
-        fixed md:static inset-0 z-40 bg-white border-r w-72 transition-transform duration-300 transform 
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
-        flex flex-col h-full
-      `}>
-        <div className="hidden md:flex items-center gap-3 px-6 py-8">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+    <div className="min-h-screen flex flex-col md:flex-row bg-gray-50 overflow-hidden font-sans">
+      {/* Sidebar Desktop */}
+      <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0">
+        <div className="p-8 flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
             <TrendingUp size={24} />
           </div>
-          <h1 className="text-xl font-bold truncate pr-2">{shopConfig.name}</h1>
+          <h1 className="text-xl font-black truncate">{shopConfig.name}</h1>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 py-4">
-          <NavItem view="dashboard" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem view="sales" icon={ShoppingCart} label="Vendas" />
-          <NavItem view="inventory" icon={Package} label="Inventário" />
-          <NavItem view="crm" icon={Users} label="Clientes" />
-          <NavItem view="finances" icon={ArrowUpCircle} label="Finanças" />
-          <div className="pt-4 border-t border-gray-100">
-            <NavItem view="settings" icon={SettingsIcon} label="Configurações" />
-          </div>
+        <nav className="flex-1 px-4 space-y-2">
+          {[
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+            { id: 'sales', icon: ShoppingCart, label: 'Vendas' },
+            { id: 'inventory', icon: Package, label: 'Inventário' },
+            { id: 'crm', icon: Users, label: 'Clientes' },
+            { id: 'finances', icon: ArrowUpCircle, label: 'Finanças' },
+            { id: 'settings', icon: SettingsIcon, label: 'Definições' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveView(item.id as AppView)}
+              className={`flex items-center justify-between w-full p-4 rounded-2xl transition-all group ${
+                activeView === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <item.icon size={20} />
+                <span className="font-bold">{item.label}</span>
+              </div>
+              <ChevronRight size={14} className={`opacity-0 group-hover:opacity-100 transition-opacity ${activeView === item.id ? 'opacity-100' : ''}`} />
+            </button>
+          ))}
         </nav>
 
-        <div className="p-6 mt-auto no-print">
-          <div className="bg-blue-50 p-4 rounded-xl">
-            <p className="text-xs text-blue-600 font-bold uppercase mb-1">Status</p>
-            <p className="text-sm text-blue-800 font-medium">Sistema Online</p>
-          </div>
+        <div className="p-4 border-t border-gray-100">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full p-4 rounded-2xl text-red-500 hover:bg-red-50 transition-all font-black text-sm"
+          >
+            <LogOut size={18} /> Sair do Sistema
+          </button>
         </div>
       </aside>
 
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />
-      )}
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto h-screen pb-24 md:pb-8 relative scroll-smooth">
+        {/* Header Mobile */}
+        <header className="md:hidden bg-white/80 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between sticky top-0 z-30 safe-area-pt">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <TrendingUp size={18} />
+            </div>
+            <span className="font-black text-lg tracking-tight truncate max-w-[180px]">{shopConfig.name}</span>
+          </div>
+          <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`}></div>
+        </header>
 
-      <main className="flex-1 overflow-y-auto h-screen pb-20 md:pb-0 relative">
-        <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <div className="max-w-5xl mx-auto p-4 md:p-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
           {renderView()}
         </div>
-
-        {activeView !== 'sales' && (
-          <button 
-            onClick={() => setActiveView('sales')}
-            className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-green-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform z-50"
-          >
-            <Plus size={28} />
-          </button>
-        )}
       </main>
+
+      {/* Mobile Bottom Navigation (Nativo em APKs) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-100 px-2 py-3 flex items-center justify-around z-50 safe-area-pb shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+        <MobileBottomTab view="dashboard" icon={LayoutDashboard} label="Início" />
+        <MobileBottomTab view="sales" icon={ShoppingCart} label="Vendas" />
+        <div className="relative -mt-12">
+            <button 
+                onClick={() => setActiveView('sales')}
+                className="w-14 h-14 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center active:scale-90 transition-all border-4 border-white"
+            >
+                <Plus size={28} strokeWidth={3} />
+            </button>
+        </div>
+        <MobileBottomTab view="inventory" icon={Package} label="Stock" />
+        <MobileBottomTab view="settings" icon={SettingsIcon} label="Ajustes" />
+      </nav>
     </div>
   );
 };

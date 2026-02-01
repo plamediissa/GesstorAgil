@@ -12,7 +12,10 @@ import {
   Banknote,
   Smartphone,
   Briefcase,
-  Package
+  Package,
+  RotateCcw,
+  Tag,
+  AlertCircle
 } from 'lucide-react';
 import { Sale, Product, Customer, SaleItem, PaymentMethod, ShopConfig } from '../types';
 import Receipt from './Receipt';
@@ -33,8 +36,11 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
   const [customerName, setCustomerName] = useState<string>('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Dinheiro');
   const [showReceipt, setShowReceipt] = useState<Sale | null>(null);
+
+  const categories = ['Todas', 'Alimentos', 'Bebidas', 'Roupas', 'Serviços', 'Eletrônicos', 'Geral'];
 
   const formatCurrency = (value: number) => {
     const formatted = new Intl.NumberFormat('pt-AO', {
@@ -44,9 +50,16 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
     return `${formatted} ${shopConfig.currency || 'Kz'}`;
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.category.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = selectedCategory === 'Todas' || p.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
+  });
 
   const currentTotal = useMemo(() => 
     selectedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0)
@@ -131,6 +144,35 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
     setShowReceipt(newSale);
   };
 
+  const handleRefund = (sale: Sale) => {
+    if (sale.status === 'refunded') return;
+    
+    const reason = window.prompt('Deseja realmente reembolsar esta venda? Se sim, insira o motivo do reembolso:');
+    
+    if (reason === null) return; // User cancelled
+
+    setSales(prev => prev.map(s => s.id === sale.id ? {
+      ...s,
+      status: 'refunded',
+      refundedAt: new Date().toISOString(),
+      refundReason: reason || 'Motivo não especificado'
+    } : s));
+
+    // Restore stock
+    setProducts(prev => prev.map(p => {
+      const returned = sale.items.find(item => item.productId === p.id);
+      return (returned && p.manageStock) ? { ...p, stock: p.stock + returned.quantity } : p;
+    }));
+
+    // Adjust customer spent
+    const customerId = sale.customerId;
+    if (customerId) {
+        setCustomers(prev => prev.map(c => 
+            c.id === customerId ? { ...c, totalSpent: Math.max(0, c.totalSpent - sale.total) } : c
+        ));
+    }
+  };
+
   if (showReceipt) {
     return <Receipt 
         sale={showReceipt} 
@@ -158,15 +200,31 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
       {isCreating ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-6">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text"
-                placeholder="Pesquisar serviço ou produto..."
-                className="w-full pl-12 pr-4 py-4 rounded-2xl border-none ring-1 ring-gray-100 focus:ring-2 focus:ring-blue-500 shadow-sm outline-none transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input 
+                  type="text"
+                  placeholder="Pesquisar por nome, código (#ID) ou categoria..."
+                  className="w-full pl-12 pr-4 py-4 rounded-2xl border-none ring-1 ring-gray-100 focus:ring-2 focus:ring-blue-500 shadow-sm outline-none transition-all"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                      selectedCategory === cat ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-400 border border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[600px] p-1">
@@ -180,11 +238,13 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
                     <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest ${product.manageStock ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'}`}>
                       {product.manageStock ? 'Item' : 'Serviço'}
                     </span>
-                    {product.manageStock ? <Package size={14} className="text-gray-300"/> : <Briefcase size={14} className="text-purple-300"/>}
+                    <span className="text-[8px] font-mono text-gray-300">#{product.id}</span>
                   </div>
                   <div>
                     <span className="font-bold text-gray-800 line-clamp-2 text-sm leading-tight">{product.name}</span>
-                    <p className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-tighter">{product.category}</p>
+                    <p className="text-[10px] text-gray-400 font-medium mt-1 uppercase tracking-tighter flex items-center gap-1">
+                      <Tag size={10} /> {product.category}
+                    </p>
                   </div>
                   <div className="flex flex-col mt-2">
                     <span className="text-lg font-black text-gray-900">{formatCurrency(product.price)}</span>
@@ -197,6 +257,12 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
                   </div>
                 </button>
               ))}
+              
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full py-12 text-center text-gray-400 italic">
+                  Nenhum resultado para "{searchQuery}"
+                </div>
+              )}
             </div>
           </div>
 
@@ -290,10 +356,10 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
             </div>
           ) : (
             sales.map(sale => (
-              <div key={sale.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+              <div key={sale.id} className={`bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden ${sale.status === 'refunded' ? 'opacity-60 bg-red-50/10' : ''}`}>
                 <div className="flex justify-between items-start mb-3">
-                  <div className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest">
-                    #{sale.id}
+                  <div className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest ${sale.status === 'refunded' ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                    #{sale.id} {sale.status === 'refunded' && '- REEMBOLSADA'}
                   </div>
                   <span className="text-[10px] font-bold text-gray-400">
                     {new Date(sale.date).toLocaleDateString('pt-AO')}
@@ -301,16 +367,35 @@ const Sales: React.FC<SalesProps> = ({ sales, setSales, products, setProducts, c
                 </div>
                 <div className="mb-4">
                    <p className="text-xs text-gray-500 font-bold uppercase tracking-tight">Valor</p>
-                   <p className="text-xl font-black text-gray-900">{formatCurrency(sale.total)}</p>
+                   <p className={`text-xl font-black ${sale.status === 'refunded' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatCurrency(sale.total)}</p>
                 </div>
-                <div className="flex items-center justify-between pt-3 border-t">
-                  <span className="text-xs font-bold text-gray-400 italic">{sale.paymentMethod}</span>
-                  <button 
-                    onClick={() => setShowReceipt(sale)}
-                    className="text-xs font-bold text-blue-600 hover:underline"
-                  >
-                    Ver Recibo
-                  </button>
+
+                {sale.status === 'refunded' && sale.refundReason && (
+                  <div className="mb-4 p-2 bg-red-50 rounded-xl flex items-start gap-2 border border-red-100">
+                    <AlertCircle size={12} className="text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-[10px] text-red-700 italic font-medium leading-tight">"{sale.refundReason}"</p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t gap-2">
+                  <span className="text-xs font-bold text-gray-400 italic truncate flex-1">{sale.paymentMethod}</span>
+                  <div className="flex items-center gap-2">
+                    {sale.status !== 'refunded' && (
+                        <button 
+                            onClick={() => handleRefund(sale)}
+                            className="p-2 text-gray-300 hover:text-red-500 transition-colors bg-gray-50 rounded-lg"
+                            title="Reembolsar Venda"
+                        >
+                            <RotateCcw size={14} />
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => setShowReceipt(sale)}
+                        className={`text-xs font-bold ${sale.status === 'refunded' ? 'text-red-500' : 'text-blue-600'} hover:underline`}
+                    >
+                        Ver Recibo
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
